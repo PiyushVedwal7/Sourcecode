@@ -1,0 +1,69 @@
+import winsound  # For playing sound on Windows
+import time
+import tkinter as tk  # For GUI
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import col
+from pyspark.sql.types import StructType, StructField, StringType, DoubleType
+
+# Initialize Spark session
+spark = SparkSession.builder \
+    .appName("SoilMonitoringSystem") \
+    .getOrCreate()
+
+# Define schema
+schema = StructType([
+    StructField("sensor_id", StringType(), True),
+    StructField("timestamp", StringType(), True),
+    StructField("soil_moisture", DoubleType(), True),
+    StructField("soil_ph", DoubleType(), True),
+    StructField("soil_temperature", DoubleType(), True)
+])
+
+# Read the CSV file into a DataFrame
+file_path = r"every hour data\part-00000-f211c25b-8b92-44e4-8d02-486967780ead-c000.csv"  # Update with your CSV file path
+df = spark.read.csv(file_path, header=True, schema=schema)
+
+# Print the DataFrame schema to see actual column names
+df.printSchema()
+
+# Show the first few rows of the DataFrame
+df.show()
+
+# Define the moisture threshold
+moisture_threshold = 15.0
+
+# Define the action for alerting
+def alert_sound():
+    winsound.Beep(1000, 800)  # Frequency 1000 Hz, Duration 1000 ms
+
+# Create a simple GUI window for flashing light
+def flash_light():
+    root = tk.Tk()
+    root.title("Alert!")
+    canvas = tk.Canvas(root, width=200, height=200)
+    canvas.pack()
+
+    # Flashing effect
+    def toggle_light():
+        current_color = canvas.cget("bg")
+        new_color = "red" if current_color == "white" else "white"
+        canvas.config(bg=new_color)
+        root.after(500, toggle_light)  # Flash every 500 ms
+
+    toggle_light()
+    root.mainloop()
+
+# Check for low moisture readings directly from the main DataFrame
+low_moisture_count = df.filter(col("soil_moisture") < moisture_threshold).count()
+
+# Alert if low moisture readings are detected
+if low_moisture_count > 0:
+    # Collect rows with low moisture values and play sound for each
+    for row in df.collect():
+        if row.soil_moisture < moisture_threshold:
+            time.sleep(2)
+            alert_sound()  # Play sound for each low moisture value
+            print(f"Alert! Low moisture detected for sensor_id: {row.sensor_id}, moisture: {row.soil_moisture}")
+    flash_light()  # Start the flashing light
+else:
+    print("No low moisture readings detected.")
